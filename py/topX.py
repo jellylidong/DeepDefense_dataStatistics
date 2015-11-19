@@ -58,7 +58,7 @@ attackTopXProtocol = attackRaw.map(lambda x:(x[3], 1)).groupByKey().map(lambda (
 #print "***************", normalTopXSrcData
 #print "*********************************"
 
-#topX
+#topXIPs and its number, attack/normal, as src/dst
 normalTopSrcIPSchema = {'IP': map(lambda x: {x[0]: x[1]}, normalTopXSrcIP)}
 normalTopDstIPSchema = {'IP': map(lambda x: {x[0]: x[1]}, normalTopXDstIP)}
 attackTopSrcIPSchema = {'IP': map(lambda x: {x[0]: x[1]}, attackTopXSrcIP)}
@@ -71,38 +71,6 @@ attackTopDstIPSchema = {'IP': map(lambda x: {x[0]: x[1]}, attackTopXDstIP)}
 import datetime
 def unix2readable(t): # t is string
 	return datetime.datetime.fromtimestamp(int(float(t))).strftime('%m-%d-%Y %H:%M:%S')
-
-#time realated: pkts/sec, bytes/sec
-# def rateFunc(rawRdd):
-# 	pktsRate = []
-# 	dataRate = []
-# 	timeline = []
-# 	sec = 0
-# 	lo = float(rawRdd.take(1)[0][5])
-# 	hi = lo + 1.0
-# 	end = float(rawRdd.collect()[-1][5])
-# 	flag = True
-# 	while(flag):
-# 		tmpRdd = rawRdd.filter(lambda x: float(x[5]) >= lo and float(x[5]) < hi)
-# 		pr = tmpRdd.count()
-# 		dr = tmpRdd.map(lambda x: float(x[2])).sum()
-# 		timeline.append(sec)
-# 		pktsRate.append(pr)
-# 		dataRate.append(dr)
-# 		if hi >= end:
-# 			flag = False
-# 		lo = hi
-# 		hi += 1.0
-# 		sec += 1.0
-#
-# 		print '********************************************************'
-# 		print '********************************************************'
-# 		print '************************' + str(lo) + '******************************'
-# 		print '************************' + str(sec) + '******************************'
-# 		print '************************' + str(hi) + '******************************'
-# 		print '********************************************************'
-# 		print '********************************************************'
-# 	return (pktsRate, dataRate, timeline)
 
 # src, dst, data_length, protocol_name, protocol_number, arrival_time (len = 6)
 def pktPerSec(rawRdd):
@@ -138,16 +106,10 @@ def protocolPerSec(rawRdd):
 normalPR, normalX = pktPerSec(normalRaw)
 normalDR, normalX = dataPerSec(normalRaw)
 attackPR, attackX = pktPerSec(attackRaw)
-attackPR, attackX = dataPerSec(attackRaw)
+attackDR, attackX = dataPerSec(attackRaw)
 
 normalProR, normalX = protocolPerSec(normalRaw) #([(pro, rate)], time)
 attackProR, attackX = protocolPerSec(attackRaw)
-
-
-# import matplotlib.pyplot as plt
-# plt.plot(normalProR[2][1])
-# plt.plot()
-# plt.show()
 
 AveragePacketRateSchema = {
 	'normal_X': normalX,
@@ -184,160 +146,244 @@ ProtocolDistributionSchema = {
 
 normalTotalData = normalRaw.map(lambda x:float(x[2])).sum()
 
-normalBhvOfTop10Src = []
-for x in normalTopXSrcIP:
-	ip = x[0]
-
-	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
-	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
-
-	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
-	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
-
-	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	normalBhvOfTop10Src.append({'IP': ip,
-
-					'Source': {
-						'PacketNumber': sendPackets,
-                		'FirstConnection': firstCnt,
-                		'LastConnection': lastCnt,
-                		'Protocols': protocolSrc,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					},
-					'Destination': {
-						'PacketNumber': receivePackets,
-                		'FirstConnection': firstCnted,
-                		'LastConnection': lastCnted,
-                		'Protocols': protocolDst,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					}
-				})
+# from geoip2 import database
+# geoDBpath = '/home/worker/workspace/DeepDefense_dataStatistics/geoDB/GeoLite2-City.mmdb'
+# geoPath = os.path.join(geoDBpath)
+# sc.addFile(geoPath)
+# readerLocal = geoip2.database.Reader('GeoLite2-City.mmdb')
+# def ip2CountryLocal(ip):
+# 	try:
+# 		country = readerLocal.city(ip).country.name
+# 	except:
+# 		country = 'not found'
+# 	return country
+#
+# def ip2CountrySpark(IP):
+#     from geoip2 import database
+#     def ip2country(ip):
+#         try:
+# 			country = readerSpark.city(ip).country.name
+#         except:
+# 			country = 'not found'
+#         return city
+#
+#     readerSpark = database.Reader(SparkFiles.get(geoDBpath))
+#     #return [ip2city(ip) for ip in iter]
+#     return ip2city(IP)
+#
+# def TopCountry(normalRawRdd, attackRawRdd):
+# 	# src, dst, data_length, protocol_name, protocol_number, arrival_time (len = 6)
+# 	normalCountry = normalRawRdd
 
 
-############ test atom
-#print bhvOfTop10Src
-#print bhvOfTop10Src
+# normalBhvOfTop10Src = []
+# for x in normalTopXSrcIP:
+# 	ip = x[0]
+#
+# 	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
+# 	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
+#
+# 	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
+# 	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
+#
+# 	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	normalBhvOfTop10Src.append({'IP': ip,
+#
+# 					'Source': {
+# 						'PacketNumber': sendPackets,
+#                 		'FirstConnection': firstCnt,
+#                 		'LastConnection': lastCnt,
+#                 		'Protocols': protocolSrc,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					},
+# 					'Destination': {
+# 						'PacketNumber': receivePackets,
+#                 		'FirstConnection': firstCnted,
+#                 		'LastConnection': lastCnted,
+#                 		'Protocols': protocolDst,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					}
+# 				})
+#
+#
+# ############ test atom
+# #print bhvOfTop10Src
+# #print bhvOfTop10Src
+#
+# normalBhvOfTop10Dst = []
+# for x in normalTopXDstIP:
+# 	ip = x[0]
+#
+# 	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
+# 	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
+#
+# 	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
+# 	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
+#
+# 	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	normalBhvOfTop10Dst.append({'IP': ip,
+#
+# 					'Source': {
+# 						'PacketNumber': sendPackets,
+#                 		'FirstConnection': firstCnt,
+#                 		'LastConnection': lastCnt,
+#                 		'Protocols': protocolSrc,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					},
+# 					'Destination': {
+# 						'PacketNumber': receivePackets,
+#                 		'FirstConnection': firstCnted,
+#                 		'LastConnection': lastCnted,
+#                 		'Protocols': protocolDst,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					}
+# 				})
+#
+#
+# attackBhvOfTop10Src= []
+# for x in attackTopXSrcIP:
+# 	ip = x[0]
+#
+# 	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
+# 	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
+#
+# 	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
+# 	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
+#
+# 	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	attackBhvOfTop10Src.append({'IP': ip,
+#
+# 					'Source': {
+# 						'PacketNumber': sendPackets,
+#                 		'FirstConnection': firstCnt,
+#                 		'LastConnection': lastCnt,
+#                 		'Protocols': protocolSrc,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					},
+# 					'Destination': {
+# 						'PacketNumber': receivePackets,
+#                 		'FirstConnection': firstCnted,
+#                 		'LastConnection': lastCnted,
+#                 		'Protocols': protocolDst,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					}
+# 				})
+#
+# attackBhvOfTop10Dst= []
+# for x in attackTopXDstIP:
+# 	ip = x[0]
+#
+# 	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
+# 	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
+#
+# 	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
+# 	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
+#
+# 	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+# 	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+#
+# 	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+# 	attackBhvOfTop10Dst.append({'IP': ip,
+#
+# 					'Source': {
+# 						'PacketNumber': sendPackets,
+#                 		'FirstConnection': firstCnt,
+#                 		'LastConnection': lastCnt,
+#                 		'Protocols': protocolSrc,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					},
+# 					'Destination': {
+# 						'PacketNumber': receivePackets,
+#                 		'FirstConnection': firstCnted,
+#                 		'LastConnection': lastCnted,
+#                 		'Protocols': protocolDst,
+#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+# 					}
+# 				})
 
-normalBhvOfTop10Dst = []
-for x in normalTopXDstIP:
-	ip = x[0]
+def bhvOfTop10IP(rawRdd, IPs):
+	#rawRdd = normalRaw or attackRaw
+	#IPs = attackTopXDstIP, (attack/normal, Src/Dst)
+	result= []
+	for x in IPs:
+		ip = x[0]
 
-	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
-	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
+		sendData = rawRdd.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
+		receiveData = rawRdd.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
 
-	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
-	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
+		sendPackets = rawRdd.filter(lambda x: x[0] == ip).count()
+		receivePackets = rawRdd.filter(lambda x: x[1] == ip).count()
 
-	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+		firstCnt = rawRdd.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+		lastCnt = rawRdd.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
 
-	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+		firstCnted = rawRdd.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
+		lastCnted = rawRdd.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
 
-	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	normalBhvOfTop10Dst.append({'IP': ip,
+		protocolSrc = rawRdd.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+		protocolDst = rawRdd.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+		result.append({'IP': ip,
 
-					'Source': {
-						'PacketNumber': sendPackets,
-                		'FirstConnection': firstCnt,
-                		'LastConnection': lastCnt,
-                		'Protocols': protocolSrc,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					},
-					'Destination': {
-						'PacketNumber': receivePackets,
-                		'FirstConnection': firstCnted,
-                		'LastConnection': lastCnted,
-                		'Protocols': protocolDst,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					}
-				})
+						'Source': {
+							'PacketNumber': sendPackets,
+	                		'FirstConnection': firstCnt,
+	                		'LastConnection': lastCnt,
+	                		'Protocols': protocolSrc,
+	                		'Country': 'NA', #[{Name: String, rate: Number}],
+	                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+						},
+						'Destination': {
+							'PacketNumber': receivePackets,
+	                		'FirstConnection': firstCnted,
+	                		'LastConnection': lastCnted,
+	                		'Protocols': protocolDst,
+	                		'Country': 'NA', #[{Name: String, rate: Number}],
+	                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
+						}
+					})
+	return result
 
-
-attackBhvOfTop10Src= []
-for x in attackTopXSrcIP:
-	ip = x[0]
-
-	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
-	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
-
-	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
-	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
-
-	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	attackBhvOfTop10Src.append({'IP': ip,
-
-					'Source': {
-						'PacketNumber': sendPackets,
-                		'FirstConnection': firstCnt,
-                		'LastConnection': lastCnt,
-                		'Protocols': protocolSrc,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					},
-					'Destination': {
-						'PacketNumber': receivePackets,
-                		'FirstConnection': firstCnted,
-                		'LastConnection': lastCnted,
-                		'Protocols': protocolDst,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					}
-				})
-
-attackBhvOfTop10Dst= []
-for x in attackTopXDstIP:
-	ip = x[0]
-
-	sendData = normalRaw.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
-	receiveData = normalRaw.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
-
-	sendPackets = normalRaw.filter(lambda x: x[0] == ip).count()
-	receivePackets = normalRaw.filter(lambda x: x[1] == ip).count()
-
-	firstCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnt = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-	firstCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-	lastCnted = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-	protocolSrc = normalRaw.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	protocolDst = normalRaw.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-	attackBhvOfTop10Dst.append({'IP': ip,
-
-					'Source': {
-						'PacketNumber': sendPackets,
-                		'FirstConnection': firstCnt,
-                		'LastConnection': lastCnt,
-                		'Protocols': protocolSrc,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					},
-					'Destination': {
-						'PacketNumber': receivePackets,
-                		'FirstConnection': firstCnted,
-                		'LastConnection': lastCnted,
-                		'Protocols': protocolDst,
-                		'Country': 'NA', #[{Name: String, rate: Number}],
-                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
-					}
-				})
+attackBehaviorOfSource = bhvOfTop10IP(attackRaw, attackTopXSrcIP)
+attackBehaviorOfDestination = bhvOfTop10IP(attackRaw, attackTopXDstIP)
+normalBehaviorOfSource = bhvOfTop10IP(normalRaw, normalTopXSrcIP)
+normalBehaviorOfDestination = bhvOfTop10IP(normalRaw, normalTopXDstIP)
+BehaviorOfTopIP = {
+	'attackBehaviorOfSource': attackBehaviorOfSource,
+	'attackBehaviorOfDestination': attackBehaviorOfDestination,
+	'normalBehaviorOfSource': normalBehaviorOfSource,
+	'normalBehaviorOfDestination': normalBehaviorOfDestination,
+}
+print attackBehaviorOfDestination[0]
