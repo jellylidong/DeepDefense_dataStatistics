@@ -1,3 +1,7 @@
+import timeit
+start = timeit.default_timer()
+
+
 import os
 import sys
 
@@ -50,13 +54,27 @@ attackTopXSrcData = attackRaw.map(lambda x:(x[0], float(x[2]))).groupByKey().map
 normalTopXDstData = normalRaw.map(lambda x:(x[1], float(x[2]))).groupByKey().map(lambda (k,v):(k, sum(v))).takeOrdered(10, key = lambda (k,v): -v)
 attackTopXDstData = attackRaw.map(lambda x:(x[1], float(x[2]))).groupByKey().map(lambda (k,v):(k, sum(v))).takeOrdered(10, key = lambda (k,v): -v)
 
-#(protocol_name, count)
-normalTopXProtocol = normalRaw.map(lambda x:(x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).takeOrdered(10, key = lambda (k,v): -v)
-attackTopXProtocol = attackRaw.map(lambda x:(x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).takeOrdered(10, key = lambda (k,v): -v)
 
-#print "*********************************"
-#print "***************", normalTopXSrcData
-#print "*********************************"
+protocolCandidates = ['HTTP', 'TCP', 'ICMP', 'UDP']
+def protocol2Others(p):
+	if not (p in protocolCandidates):
+		return 'others'
+	return p
+def listTuple2Dict(data):
+	# list of (k,v)
+	res = {}
+	res['x'] = len(data)
+	for d in data:
+		res[d[0]] = d[1]
+	return res
+#(protocol_name, count) list
+normalProtocol = normalRaw.map(lambda x:(protocol2Others(x[3]), 1)).groupByKey().map(lambda (k,v):(k, sum(v))).collect()
+attackProtocol = attackRaw.map(lambda x:(protocol2Others(x[3]), 1)).groupByKey().map(lambda (k,v):(k, sum(v))).collect()
+ProtocolDistribution = {
+	'normal': listTuple2Dict(normalProtocol),
+	'attack': listTuple2Dict(attackProtocol),
+}
+
 
 #topXIPs and its number, attack/normal, as src/dst
 normalTopSrcIPSchema = {'IP': map(lambda x: {x[0]: x[1]}, normalTopXSrcIP)}
@@ -85,21 +103,29 @@ def dataPerSec(rawRdd):
 	time = tmpRdd.map(lambda (k,v): k).collect()
 	return (rate, time)
 
-def protocolPerSec(rawRdd):
-	res = []
-	protocolList = rawRdd.map(lambda x: x[3]).distinct().collect()
+def protocolPerSec(rawRdd): #return a dictionary
+	res = {}
+	# protocolList = rawRdd.map(lambda x: x[3]).distinct().collect()
+	protocolList = ['HTTP', 'TCP', 'ICMP', 'UDP', 'others']
 	protocolRdd = rawRdd.map(lambda x: (int(float(x[5])), x[3])) #(time, protocol)
 	time = protocolRdd.map(lambda (t, p): t).collect()
 	def mapProtocol(p, target):
-		if p == target:
-			return 1
-		return 0
+		if target == 'others':
+			if p in protocolList:
+				return 0
+			else:
+				return 1
+		else:
+			if p == target:
+				return 1
+			return 0
 	for protocol in  protocolList:
 		tmpRdd = protocolRdd.map(lambda (t,p): (t, mapProtocol(p, protocol))).groupByKey().map(lambda (k,v): (k, sum(v)))
 		rate = tmpRdd.map(lambda (k,v): v).collect()
 		#time = tmpRdd.map(lambda (k,v): k).collect()
-		res.append((protocol, rate))
-	return (res, time)
+		res[protocol] = rate
+	res['X'] = time
+	return res
 
 # normalPR, normalDR, normalX = rateFunc(normalRaw)
 # attackPR, attackDR, attackX = rateFunc(attackRaw)
@@ -108,10 +134,10 @@ normalDR, normalX = dataPerSec(normalRaw)
 attackPR, attackX = pktPerSec(attackRaw)
 attackDR, attackX = dataPerSec(attackRaw)
 
-normalProR, normalX = protocolPerSec(normalRaw) #([(pro, rate)], time)
-attackProR, attackX = protocolPerSec(attackRaw)
+# normalProR, normalX = protocolPerSec(normalRaw) #([(pro, rate)], time)
+# attackProR, attackX = protocolPerSec(attackRaw)
 
-AveragePacketRateSchema = {
+AveragePacketRate = {
 	'normal_X': normalX,
 	'attack_X': attackX,
 	'normal_Average': float(sum(normalPR))/len(normalPR),
@@ -124,7 +150,7 @@ AveragePacketRateSchema = {
 	'attack_Y': attackPR
 }
 
-AverageDataRateSchema = {
+AAveragePacketData = {
 	'normal_X': normalX,
 	'attack_X': attackX,
 	'normal_Average': float(sum(normalDR))/len(normalDR),
@@ -137,8 +163,9 @@ AverageDataRateSchema = {
 	'attack_Y': attackDR
 }
 
-ProtocolDistributionSchema = {
-
+AverageProtocolRate = {
+	'normal': protocolPerSec(normalRaw),
+	'attack': protocolPerSec(attackRaw)
 }
 
 
@@ -359,6 +386,7 @@ def bhvOfTop10IP(rawRdd, IPs):
 
 						'Source': {
 							'PacketNumber': sendPackets,
+							'sendData': sendData,
 	                		'FirstConnection': firstCnt,
 	                		'LastConnection': lastCnt,
 	                		'Protocols': protocolSrc,
@@ -367,6 +395,7 @@ def bhvOfTop10IP(rawRdd, IPs):
 						},
 						'Destination': {
 							'PacketNumber': receivePackets,
+							'receiveData': receiveData,
 	                		'FirstConnection': firstCnted,
 	                		'LastConnection': lastCnted,
 	                		'Protocols': protocolDst,
@@ -386,4 +415,7 @@ BehaviorOfTopIP = {
 	'normalBehaviorOfSource': normalBehaviorOfSource,
 	'normalBehaviorOfDestination': normalBehaviorOfDestination,
 }
-print attackBehaviorOfDestination[0]
+sc.stop()
+
+stop = timeit.default_timer()
+print 'total running time: ', stop - start
