@@ -31,12 +31,12 @@ sc.addFile(attackPath);
 
 
 from pyspark import SparkFiles
-normalRdd = sc.textFile(SparkFiles.get(normalFilePath))
-attackRdd = sc.textFile(SparkFiles.get(attackFilePath))
+normalRdd = sc.textFile(SparkFiles.get(normalFilePath)).cache()
+attackRdd = sc.textFile(SparkFiles.get(attackFilePath)).cache()
 
 # src, dst, data_length, protocol_name, protocol_number, arrival_time (len = 6)
-normalRaw = normalRdd.map(lambda x: x.split(',')).filter(lambda x: len(x) == 6)
-attackRaw = attackRdd.map(lambda x: x.split(',')).filter(lambda x: len(x) == 6)
+normalRaw = normalRdd.map(lambda x: x.split(',')).filter(lambda x: len(x) == 6).cache()
+attackRaw = attackRdd.map(lambda x: x.split(',')).filter(lambda x: len(x) == 6).cache()
 
 #(ip, count)
 normalTopXSrcIP = normalRaw.map(lambda x:(x[0], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).takeOrdered(10, key = lambda (k,v): -v)
@@ -367,21 +367,22 @@ def bhvOfTop10IP(rawRdd, IPs):
 	result= []
 	for x in IPs:
 		ip = x[0]
+		srcRdd = rawRdd.filter(lambda x: x[0] == ip).cache()
+		dstRdd = rawRdd.filter(lambda x: x[1] == ip).cache()
+		sendData = srcRdd.map(lambda x:float(x[2])).sum()
+		receiveData = dstRdd.map(lambda x:float(x[2])).sum()
 
-		sendData = rawRdd.filter(lambda x: x[0] == ip).map(lambda x:float(x[2])).sum()
-		receiveData = rawRdd.filter(lambda x: x[1] == ip).map(lambda x:float(x[2])).sum()
+		sendPackets = srcRdd.count()
+		receivePackets = dstRdd.count()
 
-		sendPackets = rawRdd.filter(lambda x: x[0] == ip).count()
-		receivePackets = rawRdd.filter(lambda x: x[1] == ip).count()
+		firstCnt = srcRdd.map(lambda x: unix2readable(x[-1])).collect()[0]
+		lastCnt = dstRdd.map(lambda x: unix2readable(x[-1])).collect()[-1]
 
-		firstCnt = rawRdd.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-		lastCnt = rawRdd.filter(lambda x: x[0] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
+		firstCnted = srcRdd.map(lambda x: unix2readable(x[-1])).collect()[0]
+		lastCnted = dstRdd.map(lambda x: unix2readable(x[-1])).collect()[-1]
 
-		firstCnted = rawRdd.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[0]
-		lastCnted = rawRdd.filter(lambda x: x[1] == ip).map(lambda x: unix2readable(x[-1])).collect()[-1]
-
-		protocolSrc = rawRdd.filter(lambda x: x[0] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
-		protocolDst = rawRdd.filter(lambda x: x[1] == ip).map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+		protocolSrc = srcRdd.map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+		protocolDst = dstRdd.map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
 		result.append({'IP': ip,
 
 						'Source': {
@@ -426,8 +427,8 @@ StatisticsSchema = {
 	'BehaviorOfTopIP': BehaviorOfTopIP
 }
 
-from sendToMongo import sendToMongo
-sendToMongo(StatisticsSchema)
+#from sendToMongo import sendToMongo
+#sendToMongo(StatisticsSchema)
 
 
 stop = timeit.default_timer()
