@@ -150,7 +150,7 @@ AveragePacketRate = {
 	'attack_Y': attackPR
 }
 
-AAveragePacketData = {
+AveragePacketData = {
 	'normal_X': normalX,
 	'attack_X': attackX,
 	'normal_Average': float(sum(normalDR))/len(normalDR),
@@ -173,17 +173,17 @@ AverageProtocolRate = {
 
 normalTotalData = normalRaw.map(lambda x:float(x[2])).sum()
 
-# from geoip2 import database
-# geoDBpath = '/home/worker/workspace/DeepDefense_dataStatistics/geoDB/GeoLite2-City.mmdb'
+from geoip2 import database
+geoDBpath = '/home/worker/workspace/DeepDefense_dataStatistics/geoDB/GeoLite2-City.mmdb'
 # geoPath = os.path.join(geoDBpath)
 # sc.addFile(geoPath)
-# readerLocal = geoip2.database.Reader('GeoLite2-City.mmdb')
-# def ip2CountryLocal(ip):
-# 	try:
-# 		country = readerLocal.city(ip).country.name
-# 	except:
-# 		country = 'not found'
-# 	return country
+readerLocal = database.Reader(geoDBpath)
+def ip2CountryLocal(ip):
+	try:
+		country = readerLocal.city(ip).country.name
+	except:
+		country = 'not found'
+	return country
 #
 # def ip2CountrySpark(IP):
 #     from geoip2 import database
@@ -390,7 +390,7 @@ def bhvOfTop10IP(rawRdd, IPs):
 	                		'FirstConnection': firstCnt,
 	                		'LastConnection': lastCnt,
 	                		'Protocols': protocolSrc,
-	                		'Country': 'NA', #[{Name: String, rate: Number}],
+	                		'Country': ip2CountryLocal(ip), #[{Name: String, rate: Number}],
 	                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
 						},
 						'Destination': {
@@ -399,7 +399,7 @@ def bhvOfTop10IP(rawRdd, IPs):
 	                		'FirstConnection': firstCnted,
 	                		'LastConnection': lastCnted,
 	                		'Protocols': protocolDst,
-	                		'Country': 'NA', #[{Name: String, rate: Number}],
+	                		'Country': ip2CountryLocal(ip), #[{Name: String, rate: Number}],
 	                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
 						}
 					})
@@ -416,6 +416,19 @@ BehaviorOfTopIP = {
 	'normalBehaviorOfDestination': normalBehaviorOfDestination,
 }
 sc.stop()
+
+StatisticsSchema = {
+	'user': 'NA',
+	'AveragePacketRate': AveragePacketRate,
+	'AveragePacketData': AveragePacketData,
+	'AverageProtocolRate': AverageProtocolRate,
+	'ProtocolDistribution': ProtocolDistribution,
+	'BehaviorOfTopIP': BehaviorOfTopIP
+}
+
+from sendToMongo import sendToMongo
+sendToMongo(StatisticsSchema)
+
 
 stop = timeit.default_timer()
 print 'total running time: ', stop - start
