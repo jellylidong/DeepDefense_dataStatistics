@@ -15,10 +15,10 @@ sys.path.append(SPARK_HOME_PYTHON)
 from pyspark import SparkContext
 from pyspark import SparkConf
 
-sc = SparkContext(appName = 'topXIp')
+#sc = SparkContext(appName = 'topXIp')
 
 #test local speed: only around 75s, much faster
-#sc = SparkContext('local' , 'topXIp')
+sc = SparkContext('local' , 'topXIp')
 
 #X = sys.argv[1]
 
@@ -97,13 +97,15 @@ def unix2readable(t): # t is string
 def pktPerSec(rawRdd):
 	tmpRdd = rawRdd.map(lambda x: (int(float(x[5])), 1)).groupByKey().map(lambda (k,v): (k,sum(v))).cache()
 	rate = tmpRdd.map(lambda (k,v): v).collect()
-	time = tmpRdd.map(lambda (k,v): k).collect()
+	#time = tmpRdd.map(lambda (k,v): k-timeStart).collect()
+	time = range(tmpRdd.count())
 	return (rate, time)
 
 def dataPerSec(rawRdd):
 	tmpRdd = rawRdd.map(lambda x: (int(float(x[5])), float(x[2]))).groupByKey().map(lambda (k,v): (k,sum(v))).cache()
 	rate = tmpRdd.map(lambda (k,v): v).collect()
-	time = tmpRdd.map(lambda (k,v): k).collect()
+#	time = tmpRdd.map(lambda (k,v): k).collect()
+	time = range(tmpRdd.count())
 	return (rate, time)
 
 def protocolPerSec(rawRdd): #return a dictionary
@@ -111,7 +113,8 @@ def protocolPerSec(rawRdd): #return a dictionary
 	# protocolList = rawRdd.map(lambda x: x[3]).distinct().collect()
 	protocolList = ['HTTP', 'TCP', 'ICMP', 'UDP', 'others']
 	protocolRdd = rawRdd.map(lambda x: (int(float(x[5])), x[3])).cache() #(time, protocol)
-	time = protocolRdd.map(lambda (t, p): t).collect()
+	#time = protocolRdd.map(lambda (t, p): t).collect()
+	time = range(protocolRdd.groupByKey().count())
 	def mapProtocol(p, target):
 		if target == 'others':
 			if p in protocolList:
@@ -152,6 +155,10 @@ AveragePacketRate = {
 	'normal_Y': normalPR,
 	'attack_Y': attackPR
 }
+#ff = open("AveragePacketRate.txt", "w")
+#ff.write(str(AveragePacketRate))
+#ff.close()
+
 
 AveragePacketData = {
 	'normal_X': normalX,
@@ -165,12 +172,17 @@ AveragePacketData = {
 	'normal_Y': normalDR,
 	'attack_Y': attackDR
 }
+#ff = open("AveragePacketData.txt", "w")
+#ff.write(str(AveragePacketData))
+#ff.close()
 
 AverageProtocolRate = {
 	'normal': protocolPerSec(normalRaw),
 	'attack': protocolPerSec(attackRaw)
 }
-
+#ff = open("AverageProtocolRate.txt", "w")
+#ff.write(str(AverageProtocolRate))
+#ff.close()
 
 
 
@@ -351,7 +363,7 @@ def ip2CountryLocal(ip):
 #                 		'FirstConnection': firstCnt,
 #                 		'LastConnection': lastCnt,
 #                 		'Protocols': protocolSrc,
-#                 		'Country': 'NA', #[{Name: String, rate: Number}],
+#                 		'Country'128.101.101.101'': 'NA', #[{Name: String, rate: Number}],
 #                 		'Hours': 'NA' #[{Hour: Number, rate: Number}]
 # 					},
 # 					'Destination': {
@@ -386,6 +398,8 @@ def bhvOfTop10IP(rawRdd, IPs):
 
 		protocolSrc = srcRdd.map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
 		protocolDst = dstRdd.map(lambda x: (x[3], 1)).groupByKey().map(lambda (k,v):(k, sum(v))).map(lambda (k,v):{'Name':k, 'rate':v}).collect()
+		# country = []
+		# country.append(ip2CountryLocal(ip))
 		result.append({'IP': ip,
 
 						'Source': {
@@ -394,7 +408,7 @@ def bhvOfTop10IP(rawRdd, IPs):
 	                		'FirstConnection': firstCnt,
 	                		'LastConnection': lastCnt,
 	                		'Protocols': protocolSrc,
-	                		'Country': ip2CountryLocal(ip), #[{Name: String, rate: Number}],
+	                		'Country': {'name':ip2CountryLocal(ip)}, #[{Name: String, rate: Number}],
 	                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
 						},
 						'Destination': {
@@ -403,7 +417,7 @@ def bhvOfTop10IP(rawRdd, IPs):
 	                		'FirstConnection': firstCnted,
 	                		'LastConnection': lastCnted,
 	                		'Protocols': protocolDst,
-	                		'Country': ip2CountryLocal(ip), #[{Name: String, rate: Number}],
+	                		'Country': {'name':ip2CountryLocal(ip)}, #[{Name: String, rate: Number}],
 	                		'Hours': 'NA' #[{Hour: Number, rate: Number}]
 						}
 					})
@@ -413,12 +427,87 @@ attackBehaviorOfSource = bhvOfTop10IP(attackRaw, attackTopXSrcIP)
 attackBehaviorOfDestination = bhvOfTop10IP(attackRaw, attackTopXDstIP)
 normalBehaviorOfSource = bhvOfTop10IP(normalRaw, normalTopXSrcIP)
 normalBehaviorOfDestination = bhvOfTop10IP(normalRaw, normalTopXDstIP)
+ff = open("attackBehaviorOfSource.txt", "w")
+ff.write(str(attackBehaviorOfSource))
+ff.close()
 BehaviorOfTopIP = {
 	'attackBehaviorOfSource': attackBehaviorOfSource,
 	'attackBehaviorOfDestination': attackBehaviorOfDestination,
 	'normalBehaviorOfSource': normalBehaviorOfSource,
 	'normalBehaviorOfDestination': normalBehaviorOfDestination,
 }
+
+from ip2x import ip2city, ip2la, ip2lo
+# src, dst, data_length, protocol_name, protocol_number, arrival_time (len = 6)
+#normalRaw = normalRdd.map(lambda x: x.split(',')).filter(lambda x: len(x) == 6).cache()
+
+normalSrc = normalRaw.map(lambda x: x[0])
+normalDst = normalRaw.map(lambda x: x[1])
+attackSrc = attackRaw.map(lambda x: x[0])
+attackDst = attackRaw.map(lambda x: x[1])
+ff = open('normalDst.txt', 'w')
+ff.write(str(normalDst.collect()))
+ff.close()
+
+allIPs = normalSrc.union(normalDst).union(attackSrc).union(attackDst).distinct().collect()
+geoData = []
+for ip in allIPs:
+    lo = ip2lo(ip)
+    la = ip2la(ip)
+    geoData.append({'ip' : ip,
+                    'longitude' : lo,
+                    'lantitude' : la})
+
+attackNum = 2000
+normalNum = 2000
+victimNum = 2000
+
+ff = open('allIPs.txt', 'w')
+ff.write(str(allIPs))
+ff.close()
+
+def topCommunication(rawRdd, num, resType):
+	ipPairRdd = rawRdd.map(lambda x: x[0] + ' ' + x[1]).cache() #'src dst'
+	ipPairRddCount = (ipPairRdd.map(lambda x: (x, 1)).groupByKey().map(lambda (k,v): (k, sum(v))). #([src, dst], v)
+					  map(lambda (k,v):(k.split(' '), v)).cache())
+	values = ipPairRddCount.map(lambda (k,v):v).collect()
+	maxValue = max(values)
+	minValue = min(values)
+	rangeValue = maxValue - minValue
+	if resType == 'DS':
+		DS = []
+		data = ipPairRddCount.takeOrdered(num, key = lambda x: -x[1])
+		for x in data:
+			src = x[0][0]
+			dst = x[0][1]
+			val = x[1]
+			DS.append({'source': src,
+		                'destination' : dst,
+		                'value' : 100*(maxValue-val)/rangeValue})
+		return DS
+	if resType == 'VIC':
+		VIC = []
+		data = ipPairRddCount.takeOrdered(num, key = lambda x: -x[1])
+		for x in data:
+			dst = x[0][1]
+			val = x[1]
+			VIC.append({'destination' : dst,
+                        'value' :100*(maxValue-val)/rangeValue})
+		return VIC
+
+
+attackDS = topCommunication(attackRaw, attackNum, 'DS')
+normalDS = topCommunication(normalRaw, normalNum, 'DS')
+victimData = topCommunication(attackRaw, victimNum, 'VIC')
+ff = open('geoData.txt', 'w')
+ff.write(str(geoData))
+ff.close()
+ipDistribution = {#'recordID': 1,#sys.argv[1], #add arg!!!!!!!!
+                  'geoData' : geoData,
+                  'attackDS' : attackDS,
+                  'normalDS' : normalDS,
+                  'victimData' : victimData}
+
 sc.stop()
 
 StatisticsSchema = {
@@ -427,7 +516,8 @@ StatisticsSchema = {
 	'AveragePacketData': AveragePacketData,
 	'AverageProtocolRate': AverageProtocolRate,
 	'ProtocolDistribution': ProtocolDistribution,
-	'BehaviorOfTopIP': BehaviorOfTopIP
+	'BehaviorOfTopIP': BehaviorOfTopIP,
+	'Map': ipDistribution
 }
 
 from sendToMongo import sendToMongo
@@ -436,6 +526,7 @@ sendToMongo(StatisticsSchema)
 
 stop = timeit.default_timer()
 print 'total running time: ', stop - start
+
 # print "********************************"
 # print "********************************"
 # print "********************************"

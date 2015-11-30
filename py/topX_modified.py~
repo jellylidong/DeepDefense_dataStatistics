@@ -15,10 +15,10 @@ sys.path.append(SPARK_HOME_PYTHON)
 from pyspark import SparkContext
 from pyspark import SparkConf
 
-sc = SparkContext(appName = 'topXIp')
+#sc = SparkContext(appName = 'topXIp')
 
 #test local speed: only around 75s, much faster
-#sc = SparkContext('local' , 'topXIp')
+sc = SparkContext('local' , 'topXIp')
 
 #X = sys.argv[1]
 
@@ -97,13 +97,15 @@ def unix2readable(t): # t is string
 def pktPerSec(rawRdd):
 	tmpRdd = rawRdd.map(lambda x: (int(float(x[5])), 1)).groupByKey().map(lambda (k,v): (k,sum(v))).cache()
 	rate = tmpRdd.map(lambda (k,v): v).collect()
-	time = tmpRdd.map(lambda (k,v): k).collect()
+	#time = tmpRdd.map(lambda (k,v): k-timeStart).collect()
+	time = range(tmpRdd.count())
 	return (rate, time)
 
 def dataPerSec(rawRdd):
 	tmpRdd = rawRdd.map(lambda x: (int(float(x[5])), float(x[2]))).groupByKey().map(lambda (k,v): (k,sum(v))).cache()
 	rate = tmpRdd.map(lambda (k,v): v).collect()
-	time = tmpRdd.map(lambda (k,v): k).collect()
+#	time = tmpRdd.map(lambda (k,v): k).collect()
+	time = range(tmpRdd.count())
 	return (rate, time)
 
 def protocolPerSec(rawRdd): #return a dictionary
@@ -111,7 +113,8 @@ def protocolPerSec(rawRdd): #return a dictionary
 	# protocolList = rawRdd.map(lambda x: x[3]).distinct().collect()
 	protocolList = ['HTTP', 'TCP', 'ICMP', 'UDP', 'others']
 	protocolRdd = rawRdd.map(lambda x: (int(float(x[5])), x[3])).cache() #(time, protocol)
-	time = protocolRdd.map(lambda (t, p): t).collect()
+	#time = protocolRdd.map(lambda (t, p): t).collect()
+	time = range(protocolRdd.groupByKey().count())
 	def mapProtocol(p, target):
 		if target == 'others':
 			if p in protocolList:
@@ -152,6 +155,10 @@ AveragePacketRate = {
 	'normal_Y': normalPR,
 	'attack_Y': attackPR
 }
+#ff = open("AveragePacketRate.txt", "w")
+#ff.write(str(AveragePacketRate))
+#ff.close()
+
 
 AveragePacketData = {
 	'normal_X': normalX,
@@ -165,12 +172,17 @@ AveragePacketData = {
 	'normal_Y': normalDR,
 	'attack_Y': attackDR
 }
+#ff = open("AveragePacketData.txt", "w")
+#ff.write(str(AveragePacketData))
+#ff.close()
 
 AverageProtocolRate = {
 	'normal': protocolPerSec(normalRaw),
 	'attack': protocolPerSec(attackRaw)
 }
-
+#ff = open("AverageProtocolRate.txt", "w")
+#ff.write(str(AverageProtocolRate))
+#ff.close()
 
 
 
@@ -413,6 +425,9 @@ attackBehaviorOfSource = bhvOfTop10IP(attackRaw, attackTopXSrcIP)
 attackBehaviorOfDestination = bhvOfTop10IP(attackRaw, attackTopXDstIP)
 normalBehaviorOfSource = bhvOfTop10IP(normalRaw, normalTopXSrcIP)
 normalBehaviorOfDestination = bhvOfTop10IP(normalRaw, normalTopXDstIP)
+ff = open("attackBehaviorOfSource.txt", "w")
+ff.write(str(attackBehaviorOfSource))
+ff.close()
 BehaviorOfTopIP = {
 	'attackBehaviorOfSource': attackBehaviorOfSource,
 	'attackBehaviorOfDestination': attackBehaviorOfDestination,
@@ -430,12 +445,13 @@ StatisticsSchema = {
 	'BehaviorOfTopIP': BehaviorOfTopIP
 }
 
-from sendToMongo import sendToMongo
-sendToMongo(StatisticsSchema)
+#from sendToMongo import sendToMongo
+#sendToMongo(StatisticsSchema)
 
 
 stop = timeit.default_timer()
 print 'total running time: ', stop - start
+
 # print "********************************"
 # print "********************************"
 # print "********************************"
